@@ -77,7 +77,7 @@ logic [31:0] b_ch0, b_ch1;
 logic        b_ov, b_done;
 
 convolution_engine #(.MANT_BITS(MANT_BITS), .WIDTH(B_W), .HEIGHT(B_H), .DEPTH_BEATS(1)) dut_b (
-    .clk(clk), .rst(b_rst), .i_start(b_start), .i_last_pass(b_last_pass),
+    .i_clk(clk), .i_rst(b_rst), .i_start(b_start), .i_last_pass(b_last_pass),
     .i_data(b_data), .i_exp(b_exp), .i_valid(b_valid),
     .i_load_en(b_load_en), .i_wt_pos(b_wt_pos),
     .i_weight_data(b_wt_data), .i_weight_exp(b_wt_exp),
@@ -99,7 +99,7 @@ logic [31:0] c_ch0, c_ch1;
 logic        c_ov, c_done;
 
 convolution_engine #(.MANT_BITS(MANT_BITS), .WIDTH(C_W), .HEIGHT(C_H), .DEPTH_BEATS(2)) dut_c (
-    .clk(clk), .rst(c_rst), .i_start(c_start), .i_last_pass(c_last_pass),
+    .i_clk(clk), .i_rst(c_rst), .i_start(c_start), .i_last_pass(c_last_pass),
     .i_data(c_data), .i_exp(c_exp), .i_valid(c_valid),
     .i_load_en(c_load_en), .i_wt_pos(c_wt_pos),
     .i_weight_data(c_wt_data), .i_weight_exp(c_wt_exp),
