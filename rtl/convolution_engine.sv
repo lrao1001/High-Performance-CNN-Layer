@@ -492,7 +492,7 @@ module convolution_engine #(
         fp32_add #(
 				.LATENCY(ACCUM_ADD_LAT)
 		  ) u_accum_add_ch0 (
-            .i_clk	(i_clk),
+            .clk	(i_clk),
 				.a			(tree_sum_ch0_ff),
 				.b			(prev_ch0),
 				.sum		(new_ch0)
@@ -501,7 +501,7 @@ module convolution_engine #(
         fp32_add #(
 				.LATENCY(ACCUM_ADD_LAT)
 		  ) u_accum_add_ch1 (
-            .i_clk	(i_clk),
+            .clk	(i_clk),
 				.a			(tree_sum_ch1_ff),
 				.b			(prev_ch1),
 				.sum		(new_ch1)
