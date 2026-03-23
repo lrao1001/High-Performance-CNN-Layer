@@ -1,0 +1,172 @@
+My buddy Claude generated this README for all of us to enjoy.
+
+# MXFP CNN Convolution Engine on Altera Agilex-5 FPGA
+
+A weight-stationary 3×3 CNN convolution engine targeting the Altera Agilex-5 FPGA, exploiting the AI-optimized tensor DSP blocks with MXFP (Microscaling Floating Point) precision.
+
+## Architecture
+
+The engine uses a **weight-stationary dataflow**: 9 kernel weights are loaded once into DSP registers and activations stream through at 1 stick/cycle. Each activation is broadcast to all 9 `channel_dot_product` units simultaneously, producing 9 partial sums that are accumulated in BRAMs and summed when all contributions for an output pixel are ready.
+
+```
+                      ┌─ CDP[0] wt(0,0) → BRAM[0]
+                      ├─ CDP[1] wt(0,1) → BRAM[1]
+act(r,c) ──broadcast──┼─ ...
+                      ├─ CDP[7] wt(2,1) → BRAM[7]
+                      └─ CDP[8] wt(2,2) → BYPASS (completes pixel)
+                                             │
+                      8 BRAM reads + 1 bypass → FP32 adder tree → output
+```
+
+**Key design decisions:**
+
+- **Weight-stationary** — weights fixed in DSP registers, activations flow through. Eliminates line buffers and shift registers entirely.
+- **Input staggering** — each DSP in the cascade chain receives data delayed by 2×i cycles, aligning partial results with cascade propagation. Achieves full throughput (1 dot-32/cycle) despite the 2-cycle cascade register.
+- **CDP[8] bypass** — kernel position (2,2) always contributes the last piece for each output pixel. Its result goes directly to the adder tree, avoiding a read/write conflict on a 9th BRAM.
+- **Multi-pass accumulation** — for C_in > 32, the image is streamed once per group of 32 channels. Weights are loaded once per pass and reused across all pixels (professor's weight reuse strategy).
+
+## Module Hierarchy
+
+```
+convolution_engine
+├── channel_dot_product (×9)        — One per 3×3 kernel position
+│   ├── mxfp_to_int8 (×32)         — MXFP E2M1 → INT8 conversion
+│   └── altera_fp_aitb (×4)        — DSP wrapper (cascaded with input staggering)
+│       └── tennm_dsp_prime         — Agilex-5 DSP primitive
+├── psum_bram (×8)                  — Partial-sum storage (within-pass)
+├── fp32_adder_tree (×2)            — 9→1 FP32 reduction (one per output channel)
+│   ├── fp32_add (×8)              — FP32 adder (behavioral sim / Altera IP synth)
+│   └── fp32_delay (×3)            — Pipeline alignment for passthrough paths
+└── psum_bram (×1, multi-pass)     — Cross-pass accumulation BRAM
+    └── fp32_add (×2)              — Accumulation adders
+```
+
+## MXFP Format
+
+The engine uses **E2M1** (4-bit MXFP) activations with block scaling:
+
+| Field    | Bits | Description          |
+|----------|------|----------------------|
+| Sign     | 1    | 0 = positive         |
+| Exponent | 2    | Bias = 1             |
+| Mantissa | 1    | Implicit leading 1 for normal |
+
+Possible INT8 magnitudes after ×2 scaled conversion: 0, 1, 2, 3, 4, 6, 8, 12.
+
+The shared block exponent is adjusted from MXFP bias (1) to FP32 bias (127) with a +125 offset that accounts for the ×2 scaling in the converter.
+
+## DSP Configuration
+
+Each `channel_dot_product` contains 4 Agilex-5 AI tensor DSPs in cascade:
+
+- **Mode**: `tensor_fp` — dot-10 with INT8 inputs and shared exponent, FP32 output
+- **Columns**: 2 per DSP (col1 and col2) → 2 output channels per pixel
+- **Cascade**: DSP 0 uses `tensor_output`, DSPs 1–3 use `tensor_chain_output`
+- **Latency**: 5 cycles (data_in → output) + 2 cycles per cascade hop = 11 total
+- **Throughput**: 1 dot-32 result per cycle (fully pipelined via input staggering)
+
+### Input Staggering
+
+The cascade chain has a 2-cycle propagation delay per hop. Without compensation, streaming data every cycle causes misaligned accumulation. The solution: delay each DSP's inputs by 2×i cycles (where i = DSP index). The load/compute mux operates **after** the delay, so each DSP independently detects its own weight-loading transition.
+
+## Parameters
+
+| Parameter    | Default | Description                              |
+|-------------|---------|------------------------------------------|
+| `MANT_BITS` | 1       | MXFP mantissa width (1=E2M1, 3=E2M3)    |
+| `WIDTH`     | 5       | Input image width                        |
+| `HEIGHT`    | 5       | Input image height                       |
+| `DEPTH_BEATS` | 1     | ceil(C_in / 32) — number of channel passes |
+
+Output image dimensions: (WIDTH−2) × (HEIGHT−2) for a 3×3 kernel with no padding.
+
+## Pipeline Latency
+
+| Stage                | Cycles | Description                          |
+|---------------------|--------|--------------------------------------|
+| MXFP → INT8         | 0      | Combinational                        |
+| DSP cascade          | 11     | 5 + 2 + 2 + 2 (input staggered)     |
+| BRAM read            | 1      | Partial-sum retrieval                |
+| FP32 adder tree      | 20     | 4 levels × 5-cycle Altera FP IP     |
+| Accum add (multi-pass) | 5    | Cross-pass FP32 addition            |
+| Output register      | 1      | Final pipeline stage                 |
+| **Total**            | **~38** | **Throughput: 1 pixel/cycle**       |
+
+## Resource Usage
+
+| Resource           | Count                          | Notes                        |
+|-------------------|-------------------------------|------------------------------|
+| AI DSP blocks      | 36                            | 9 positions × 4 cascaded    |
+| Partial-sum BRAMs  | 8 × (W−2)(H−2) × 64 bits     | Within-pass accumulation     |
+| Accum BRAM         | 1 × (W−2)(H−2) × 64 bits     | Cross-pass (DEPTH_BEATS > 1) |
+| FP32 adders (tree) | 8                             | 9→1 reduction, 4 levels     |
+| FP32 adders (accum)| 2                             | Read-modify-write per channel|
+
+## Multi-Pass Operation (C_in > 32)
+
+For C_in = 64 (DEPTH_BEATS = 2), the external controller sequences:
+
+```
+Pass 0:  Load weights[ch 0–31] → stream entire image → partial sums in accum BRAM
+Pass 1:  Load weights[ch 32–63] → stream entire image → add to accum BRAM → output
+```
+
+Weight loading costs 3 cycles per CDP × 9 CDPs = 27 cycles per pass. This is amortized over W×H pixels per pass (e.g., 10,000 pixels for a 100×100 image).
+
+The "feed zero on first pass" trick ensures identical pipeline latency regardless of pass number: the accumulation adder computes `tree_sum + 0` on pass 0 and `tree_sum + prev_accum` on subsequent passes.
+
+## Files
+
+| File                        | Description                                          |
+|----------------------------|------------------------------------------------------|
+| `convolution_engine.sv`     | Top-level engine with BRAMs, adder tree, multi-pass  |
+| `channel_dot_product.sv`    | 4-DSP cascade with input staggering, 2 channels      |
+| `mxfp_to_int8.sv`          | Combinational MXFP E2M1/E2M3 to INT8 converter      |
+| `altera_fp_aitb.sv`        | DSP wrapper for tennm_dsp_prime                      |
+| `fp32_adder_tree.sv`       | 9→1 pipelined FP32 reduction + fp32_add + fp32_delay |
+| `fp32_add_ip.v`            | Quartus-generated FP32 adder IP (5-cycle latency)    |
+| `convolution_engine_tb.sv`  | Comprehensive testbench (12 phases, 3 DUT instances) |
+| `channel_dot_product_tb.sv` | CDP unit testbench (10 tests, weight reload)         |
+| `ce_run_gui.tcl`           | Questa run script for engine testbench               |
+| `cdp_run_gui.tcl`          | Questa run script for CDP testbench                  |
+
+## Simulation
+
+Requires Questa/ModelSim with Altera FPGA libraries (`tennm_ver` for Agilex-5 DSP primitives).
+
+```bash
+# Run CDP unit tests
+do cdp_run_gui.tcl
+
+# Run full engine tests (12 phases including random fuzz)
+do ce_run_gui.tcl
+```
+
+The `+define+SIMULATION` flag (set in the TCL scripts) selects behavioral FP32 addition for simulation. Remove it for synthesis to use the Altera FP IP.
+
+## Synthesis
+
+Target: Altera Agilex-5 (Quartus Prime Pro 25.x)
+
+1. Create Quartus project targeting your Agilex-5 device
+2. Generate `fp32_add_ip` from IP Catalog: Floating Point Functions → Add → Single Precision → 5 pipeline stages
+3. Add all `.sv` files and the generated IP to the project
+4. Compile — ensure `+define+SIMULATION` is **not** set for synthesis
+
+## Verification Summary
+
+| Phase               | Image  | Kernel              | What it tests                          |
+|--------------------|--------|--------------------|-----------------------------------------|
+| CDP unit test       | —      | Various             | DSP cascade, input staggering, 2 channels |
+| 5×5 uniform         | 5×5    | All 1/2             | Basic dataflow sanity                    |
+| 5×5 Gaussian        | 5×5    | 1-2-1-2-4-2-1-2-1  | Per-position kernel indexing             |
+| 10×10 rotating      | 10×10  | Gaussian            | BRAM depth, 64 output pixels             |
+| 5×5 multi-pass      | 5×5    | Uniform per pass    | Cross-pass accumulation                  |
+| Random single ×5    | 5×5    | Random INT8         | Fuzz testing, full MXFP range            |
+| Random multi ×3     | 5×5    | Random INT8 ×2 pass | Multi-pass fuzz with golden model        |
+
+All tests use a programmatic golden model that computes expected values from the same image and kernel data.
+
+## Acknowledgments
+
+Developed under the guidance of Professor Andrew Boutros. The DSP tensor mode configuration and weight loading protocol are based on the Altera Agilex-5 Variable Precision DSP Blocks User Guide (Document 813968).
