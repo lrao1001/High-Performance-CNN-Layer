@@ -9,6 +9,8 @@ Supervised by Professor Andrew Boutros, University of Waterloo.
 ![Single-pass Strategy](/image/Slide3.jpg)
 ![Multi-pass Strategy](/image/Slide4.jpg)
 ![Resource Usage](/image/Slide5.jpg)
+![Design Limitations](/image/Slide6.jpg)
+![Improvements](/image/Slide7.jpg)
 
 Resources
 1. [MXFP Paper](https://arxiv.org/pdf/2310.10537)
