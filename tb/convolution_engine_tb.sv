@@ -55,7 +55,7 @@ logic [31:0] a_ch0, a_ch1;
 logic        a_ov, a_done;
 
 convolution_engine #(.MANT_BITS(MANT_BITS), .WIDTH(A_W), .HEIGHT(A_H), .DEPTH_BEATS(1)) dut_a (
-    .clk(clk), .rst(a_rst), .i_start(a_start), .i_last_pass(a_last_pass),
+    .i_clk(clk), .i_rst(a_rst), .i_start(a_start), .i_last_pass(a_last_pass),
     .i_data(a_data), .i_exp(a_exp), .i_valid(a_valid),
     .i_load_en(a_load_en), .i_wt_pos(a_wt_pos),
     .i_weight_data(a_wt_data), .i_weight_exp(a_wt_exp),
