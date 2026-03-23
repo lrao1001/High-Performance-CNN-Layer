@@ -2,6 +2,8 @@
 
 A weight-stationary 3×3 CNN convolution engine targeting the Altera Agilex-5 FPGA, exploiting the AI-optimized tensor DSP blocks with MXFP (Microscaling Floating Point) precision.
 
+Supervised by Professor Andrew Boutros, University of Waterloo.
+
 ![Intro](/image/Slide1.jpg)
 ![Top-Level Architecture](/image/Slide2.jpg)
 ![Single-pass Strategy](/image/Slide3.jpg)
