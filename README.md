@@ -4,6 +4,13 @@ My buddy Claude generated this README for all of us to enjoy.
 
 A weight-stationary 3×3 CNN convolution engine targeting the Altera Agilex-5 FPGA, exploiting the AI-optimized tensor DSP blocks with MXFP (Microscaling Floating Point) precision.
 
+![Intro](/image/Slide1.jpg)
+![Top-Level Architecture](/image/Slide2.jpg)
+![Single-pass Strategy](/image/Slide3.jpg)
+![Multi-pass Strategy](/image/Slide4.jpg)
+![Resource Usage](/image/Slide5.jpg)
+
+
 ## Architecture
 
 The engine uses a **weight-stationary dataflow**: 9 kernel weights are loaded once into DSP registers and activations stream through at 1 stick/cycle. Each activation is broadcast to all 9 `channel_dot_product` units simultaneously, producing 9 partial sums that are accumulated in BRAMs and summed when all contributions for an output pixel are ready.
