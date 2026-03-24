@@ -152,9 +152,8 @@ The "feed zero on first pass" trick ensures identical pipeline latency regardles
 Requires Questa/ModelSim with Altera FPGA libraries (`tennm_ver` for Agilex-5 DSP primitives).
 
 ```bash
-# Run CDP unit tests
-do cdp_run_gui.tcl
-
+# Run basic engine test (single-pass, ie. 32 channels for a 50x50 image)
+do ce_50x50_run.tcl
 # Run full engine tests (12 phases including random fuzz)
 do ce_run_gui.tcl
 ```
