@@ -1,4 +1,4 @@
-# High-Performance MXFP CNN Layer on Altera Agilex-5 FPGA
+# High-Performance MXFP Convolution Layer on Altera Agilex-5 FPGA
 
 A weight-stationary 3×3 CNN convolution engine targeting the Altera Agilex-5 FPGA, exploiting the AI-optimized tensor DSP blocks with MXFP (Microscaling Floating Point) precision.
 
