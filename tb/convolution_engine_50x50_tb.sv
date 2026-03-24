@@ -51,7 +51,7 @@ logic        out_valid, done;
 convolution_engine #(
     .MANT_BITS(MANT_BITS), .WIDTH(WIDTH), .HEIGHT(HEIGHT), .DEPTH_BEATS(1)
 ) dut (
-    .clk(clk), .rst(rst), .i_start(start), .i_last_pass(last_pass),
+    .i_clk(clk), .i_rst(rst), .i_start(start), .i_last_pass(last_pass),
     .i_data(data), .i_exp(exp), .i_valid(valid),
     .i_load_en(load_en), .i_wt_pos(wt_pos),
     .i_weight_data(wt_data), .i_weight_exp(wt_exp),
