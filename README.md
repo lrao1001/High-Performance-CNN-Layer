@@ -13,6 +13,8 @@ Supervised by Professor Andrew Boutros, University of Waterloo.
 ![Design Limitations](/image/Slide7.jpg)
 ![Improvements](/image/Slide8.jpg)
 
+![Improvements](partial_sum_visualization.html)
+
 Resources
 1. [MXFP Paper](https://arxiv.org/pdf/2310.10537)
    B. D. Rouhani et al., “Microscaling data formats for deep learning,” arXiv preprint arXiv:2310.10537, 2023.
