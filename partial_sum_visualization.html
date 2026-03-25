@@ -1,0 +1,134 @@
+<style>
+body { margin: 0; }
+.wrap { background: #0a0a0a; border-radius: 12px; padding: 24px; position: relative; overflow: hidden; }
+.glow { position: absolute; bottom: -60px; left: 50%; transform: translateX(-50%); width: 600px; height: 180px; background: radial-gradient(ellipse, rgba(232,89,60,0.2) 0%, rgba(160,50,120,0.12) 40%, transparent 70%); pointer-events: none; }
+.grids { display: flex; justify-content: center; gap: 60px; align-items: flex-start; position: relative; z-index: 1; }
+.grid-wrap { text-align: center; }
+.grid-label { font-size: 15px; font-weight: 500; color: #CBD5E1; font-family: var(--font-sans); margin: 0 0 10px; }
+.grid { display: inline-grid; gap: 2px; }
+.cell { width: 44px; height: 44px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; cursor: pointer; transition: all 0.15s; border: 0.5px solid rgba(100,116,139,0.3); }
+.cell.in-default { background: rgba(40,50,70,0.7); color: #64748B; }
+.cell.in-selected { background: #E8593C; color: #fff; font-weight: 500; border-color: #FF7A5C; }
+.cell.out-default { background: rgba(40,50,70,0.7); color: #64748B; }
+.cell.out-hit { background: rgba(232,89,60,0.6); color: #fff; font-weight: 500; border-color: rgba(255,150,100,0.7); font-size: 9px; line-height: 1.2; }
+.cell.out-complete { background: rgba(16,185,129,0.5); color: #fff; font-weight: 500; border-color: rgba(16,185,129,0.7); font-size: 9px; }
+.cell:hover { transform: scale(1.08); }
+.arrow-area { position: relative; z-index: 1; margin: 12px 0 0; }
+.note { font-size: 13px; color: #94A3B8; font-family: var(--font-sans); text-align: center; margin: 16px 0 0; line-height: 1.6; position: relative; z-index: 1; }
+.note b { color: #E8593C; font-weight: 500; }
+.legend { display: flex; gap: 20px; justify-content: center; margin: 14px 0 0; position: relative; z-index: 1; }
+.legend-item { font-size: 12px; color: #64748B; font-family: var(--font-sans); display: flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+
+<div class="wrap">
+<div class="glow"></div>
+
+<div class="grids">
+  <div class="grid-wrap">
+    <div class="grid-label">Input activations (7×7)</div>
+    <div class="grid" id="in-grid" style="grid-template-columns:repeat(7,44px);"></div>
+    <div style="font-size:11px;color:#64748B;margin-top:6px;font-family:var(--font-sans);">Click any input pixel</div>
+  </div>
+  <div class="grid-wrap">
+    <div class="grid-label">Output pixels (5×5)</div>
+    <div class="grid" id="out-grid" style="grid-template-columns:repeat(5,44px);"></div>
+    <div style="font-size:11px;color:#64748B;margin-top:6px;font-family:var(--font-sans);">Highlighted = receives partial sum</div>
+  </div>
+</div>
+
+<svg id="arrows" width="100%" viewBox="0 0 680 20" style="position:relative;z-index:1;margin:4px 0;"></svg>
+
+<div class="note" id="note-text">
+  Click an input pixel to see which <b>9 output pixels</b> receive its partial sums
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#E8593C;"></div>Selected input</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:rgba(232,89,60,0.6);"></div>Receives partial sum</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:rgba(16,185,129,0.5);"></div>CDP[8]: pixel complete!</div>
+</div>
+</div>
+
+<script>
+const IW=7, IH=7, OW=IW-2, OH=IH-2;
+let selR=-1, selC=-1;
+
+const kernelLabels = [
+  'wt(0,0)','wt(0,1)','wt(0,2)',
+  'wt(1,0)','wt(1,1)','wt(1,2)',
+  'wt(2,0)','wt(2,1)','wt(2,2)'
+];
+
+function buildGrids(){
+  const ig = document.getElementById('in-grid');
+  const og = document.getElementById('out-grid');
+  ig.innerHTML = '';
+  og.innerHTML = '';
+  for(let r=0;r<IH;r++)
+    for(let c=0;c<IW;c++){
+      const d = document.createElement('div');
+      d.className = 'cell in-default';
+      d.textContent = `${r},${c}`;
+      d.onclick = ()=>select(r,c);
+      d.id = `in-${r}-${c}`;
+      ig.appendChild(d);
+    }
+  for(let r=0;r<OH;r++)
+    for(let c=0;c<OW;c++){
+      const d = document.createElement('div');
+      d.className = 'cell out-default';
+      d.textContent = `${r},${c}`;
+      d.id = `out-${r}-${c}`;
+      og.appendChild(d);
+    }
+}
+
+function select(r,c){
+  selR=r; selC=c;
+
+  for(let rr=0;rr<IH;rr++)
+    for(let cc=0;cc<IW;cc++){
+      const el=document.getElementById(`in-${rr}-${cc}`);
+      el.className = (rr===r&&cc===c) ? 'cell in-selected' : 'cell in-default';
+    }
+
+  for(let rr=0;rr<OH;rr++)
+    for(let cc=0;cc<OW;cc++){
+      const el=document.getElementById(`out-${rr}-${cc}`);
+      el.className = 'cell out-default';
+      el.textContent = `${rr},${cc}`;
+    }
+
+  const targets = [];
+  for(let ky=0;ky<3;ky++)
+    for(let kx=0;kx<3;kx++){
+      const k = ky*3+kx;
+      const or_ = r - ky;
+      const oc_ = c - kx;
+      if(or_>=0 && or_<OH && oc_>=0 && oc_<OW){
+        const el = document.getElementById(`out-${or_}-${oc_}`);
+        const isLast = (ky===2 && kx===2);
+        el.className = isLast ? 'cell out-complete' : 'cell out-hit';
+        el.innerHTML = `<div>${or_},${oc_}</div><div style="font-size:8px;opacity:0.8;">CDP[${k}]</div>`;
+        targets.push({or_,oc_,k,isLast});
+      }
+    }
+
+  const validCount = targets.length;
+  const completeCount = targets.filter(t=>t.isLast).length;
+
+  let noteHTML = `Activation <b>(${r}, ${c})</b> → broadcast to all 9 CDPs → <b>${validCount} partial sums</b> stored in BRAMs`;
+  if(completeCount > 0){
+    const comp = targets.filter(t=>t.isLast);
+    noteHTML += `<br>CDP[8] completes pixel <b>out(${comp[0].or_}, ${comp[0].oc_})</b> — bypassed directly to adder tree`;
+  }
+  if(validCount < 9){
+    noteHTML += `<br><span style="color:#64748B;">${9-validCount} CDPs produce out-of-bounds results (border pixels, discarded)</span>`;
+  }
+  document.getElementById('note-text').innerHTML = noteHTML;
+}
+
+buildGrids();
+select(3,3);
+</script>
