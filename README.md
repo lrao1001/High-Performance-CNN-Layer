@@ -4,6 +4,8 @@ A weight-stationary 3×3 CNN convolution engine targeting the Altera Agilex-5 FP
 
 Advised by Professor Andrew Boutros, University of Waterloo.
 
+Topfile is /rtl/convolution_engine.sv
+
 ![Intro](/image/Slide1.jpg)
 ![Introduction](/image/Slide2.jpg)
 ![Top-Level Architecture](/image/Slide3.jpg)
